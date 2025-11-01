@@ -2,6 +2,15 @@
   conda activate pyrosetta
   python sym_helix_extended_pyrosetta.py config_helix.json
   outs/helix_output_CA_only__symN-5__R-18.0__tilt-15.0__roll-20.0.pdb
+  
+# What this script does:
+    - Build ideal alpha-helix or load user PDB as seed
+    - Apply rigid-body transforms to align helix axis
+    1. local alignment / roll
+    2. Cn symmetry placement (+ tilt)
+    3. Dn dihedral extension 
+    4. Ring stacking / expansion
+    - Output multi-chain CA-only for downstream visualization / MPNN
 """
 
 import os, math, json, string
@@ -13,7 +22,7 @@ from pyrosetta import rosetta
 # =========================================================
 # Default parameters
 # =========================================================
-# For single helix
+# For demo: single helix
 helix_len = 28 # number of residues in the helix
 phi_deg = -57.8 # typical alpha-helix phi angle
 psi_deg = -47.0 # typical alpha-helix psi angle
@@ -21,52 +30,47 @@ omega_deg = 180.0 # typical alpha-helix omega angle
 helix_axis = "0,0,1" # direction vector of helix axis
 helix_start = "0,0,0" # starting point of helix
 
-# Otherwise, use your own pdb
-# --- Optional: use a user-supplied PDB as the seed instead of an ideal helix ---
-input_pdb_path = ""      # e.g. "inputs/seed.pdb"; empty string means "disabled"
-input_chain = ""         # e.g. "A"; empty means "use whole pose or infer"
-input_pdb_range = ""     # e.g. "5-42" in PDB numbering within the chosen chain; empty means "full chain"
+# --- Otherwise, use your own pdb ---
+input_pdb_path = ""      # empty string means "disabled"
+input_chain = ""         # "A"; empty means "use whole pose or infer"
+input_pdb_range = ""     # "5-42" in PDB numbering within the chosen chain; empty means "full chain"
+# --- Imported-PDB axis controls (so imported PDBs can be aimed like ideal helices) ---
+input_axis_mode = "auto_pca"      # "auto_pca" | "auto_ends" | "explicit"
+input_axis_hint = "0,0,1"         # used only if input_axis_mode == "explicit"
+input_target_axis = "0,0,1"       # where to point the imported fragment’s long axis
+input_pre_roll_deg = 0.0          # roll around the (aligned) target axis
+input_center_to = "none"          # "none" | "sym_center" | "x,y,z"
+input_flip_if_opposite = True     # flip source axis if ~180° to target (for minimal rotation)
 
 
-# Local alignment parameters
+# --- Local alignment parameters ---
 local_align_axis = "1,0,0" # e.g., "1,0,0"
 local_align_deg = 0.0 # e.g., 30.0, rotate about local_align_axis
 local_roll_deg = 0.0 # e.g., 15.0, similar to the helical rotation in crick parameters
 
-# Cn symmetry parameters
+
+# --- Cn symmetry parameters ---
 sym_n = 0 # number of symmetry units; 0 means no symmetry
-sym_axis = "0,0,1" # symmetry axis direction
+sym_axis = "0,0,1" # symmetry axis direction, default Z
 sym_center = "0,0,0" # symmetry center point
 sym_radius = 15.0 # radius from symmetry axis to helix center
-sym_start_angle = 0.0 # starting angle for symmetry placement
-global_tilt_deg = 0.0 # tilt angle of helix away from radial direction (flower or umbralla)
-
+sym_start_angle = 0.0 # starting angle for symmetry placement (azimuth of the first helix/pdb)
+global_tilt_deg = 0.0 # tilt each helix away from sym_axis by this many degrees (lean in/out)
 
 # --- Dihedral extension (C_n -> D_n) ---
-dihedral_enable = False
+dihedral_enable = False # create partner ring by a 180° rotation about dihedral_axis through sym_center
 dihedral_axis = "1,0,0"         # a C2 axis perpendicular to sym_axis
-dihedral_twist_deg = 0.0        # optional extra twist about sym_axis after reflection
-
-# NEW: post-reflection rigid moves applied to the reflected partners only
-dihedral_post_twist_deg = 0.0      # rotate around sym_axis by this many degrees
-dihedral_post_shift_z   = 0.0      # translate along sym_axis (Å)
+dihedral_post_shift_z   = 0.0      # translate/shift along sym_axis (Å)
 dihedral_post_delta_r   = 0.0      # push outward radially from sym_center (Å)
-dihedral_post_yaw_deg   = 0.0      # (optional) rotate around the dihedral_axis itself
+dihedral_twist_deg = 0.0        # extra twist about sym_axis immediately after reflection
+# Not commonly used but nice to have
+dihedral_post_yaw_deg   = 0.0      # rotate around the dihedral_axis itself
 
 # --- Ring stacking / expansion ---
 ring_stack_copies = 0           # number of extra rings to add
 ring_delta_radius = 0.0         # outward shift per ring (Å)
 ring_delta_z = 0.0              # axial shift per ring (Å)
 ring_delta_twist_deg = 0.0      # extra azimuth per ring (deg)
-
-
-# Screw parameters (don't use it unless you know what the outcome - fiber)
-# Set screw repeat as 0
-screw_mode = 'global' # 'global' or 'per_chain'
-screw_repeats = 0 # number of screw repeats; 0 means no screw
-screw_delta_deg = 36.0 # rotation per repeat in degrees
-screw_delta_shift = 2.0 # translation per repeat along screw axis
-screw_axis = "0,1,0" # screw axis direction
 
 resname = "ALA"     # residue name to display in PDB
 out_pdb = "outs/helix_output_CA_only.pdb" # output PDB file path
@@ -78,6 +82,7 @@ out_pdb = "outs/helix_output_CA_only.pdb" # output PDB file path
 def unit(v): 
     # 3D vector operations
     # unit([3, 4, 0]) -> array([0.6, 0.8, 0. ])
+    # build unit axes for stable rotation and projections
     v=np.asarray(v,float)
     n=np.linalg.norm(v)
     return v if n==0 else v/n
@@ -85,7 +90,9 @@ def unit(v):
 def rotmat_axis_angle(axis,angle_deg):
     """
     Purpose: build a 3x3 rotation matrix that rotates vectors by angle_deg degrees about 
-    the given axis (right‑hand rule). Method: implements Rodrigues' rotation formula.
+    the given axis (right hand rule). Method: implements Rodrigues' rotation formula.
+    - Every tilt/roll/twist in the script use this function to build rotation matrices. (A 3x3 matrix
+    that defines how to rotate a vector in 3D space.)
     """
     # normalize the axis vector
     a=unit(np.array(axis,float))
@@ -109,21 +116,17 @@ def apply_rt(X,R=None,t=None):
     # X: Nx3 array of points
     # R: 3x3 rotation matrix
     # t: 3D translation vector
+    # X = np.array([[1, 0, 0]]) # one point at (1,0,0)
+    # R = np.array([[0,-1,0],[1,0,0],[0,0,1]]) # rotate 90° around Z
+    # t = np.array([0, 0, 1]) # shift up by 1 Å
+    # print(X @ R.T + t) [[0, 1, 1]]
     X=np.asarray(X,float)
     R=np.eye(3) if R is None else R
     t=np.zeros(3) if t is None else t
     return (X@R.T)+t
 
-def helix_axis_of_pose(pose):
-    ca = extract_CA_coords(pose)
-    if len(ca) >= 2:
-        axis = ca[-1] - ca[0]
-    else:
-        axis = np.array([0,0,1], float)
-    return unit(axis)
-
 def v3(s):
-    # Convert comma-separated string to 3D vector
+    # Convert comma-separated string (from json or global) to 3D vector
     return np.array([float(x) for x in s.split(",")],float)
 
 def load_config_json(path:str):
@@ -138,12 +141,15 @@ def load_config_json(path:str):
 # PyRosetta 操作
 # =========================================================
 def init_pyrosetta(): 
+    # mute start messages
     pyrosetta.init("-mute all")
 
 def build_ideal_helix_pose(n_res:int,aa="A"):
     seq = aa * n_res
+    # Set the full-atom residue types (not centroid or coarse-grained)
     cm = rosetta.core.chemical.ChemicalManager.get_instance()
     fa_rts = cm.residue_type_set("fa_standard")
+    # Make empty pose and build from sequence
     pose = rosetta.core.pose.Pose()
     rosetta.core.pose.make_pose_from_sequence(pose, seq, fa_rts)
     # Set ideal helix backbone torsions
@@ -156,40 +162,98 @@ def build_ideal_helix_pose(n_res:int,aa="A"):
 def pose_center_CA(pose):
     # Compute center of mass of CA atoms
     xs = []
+    # Iterate over all residues, take the coordinates of CA atoms
     for i in range(1, pose.size() + 1):
         aid = rosetta.core.id.AtomID(pose.residue(i).atom_index("CA"), i)
         v = pose.xyz(aid)
         xs.append([v.x, v.y, v.z])
+    # Return mean position for all CA atoms
     return np.mean(np.asarray(xs, dtype=float), axis=0)
 
 def transform_pose(pose,R=None,t=None,about=None):
-    # Apply rotation R and translation t to the pose about point 'about'
+    # Apply rotation R and translation t to the pose about point 'about' default as origin
     R=np.eye(3) if R is None else R
     t=np.zeros(3) if t is None else t
     about=np.zeros(3) if about is None else about
-    # Apply to all atoms
+    # For all the residue in pose
     for i in range(1,pose.size()+1):
         rsd=pose.residue(i)
+        # For all the atom in residue
         for j in range(1,rsd.natoms()+1):
+            # get atom id
             aid=rosetta.core.id.AtomID(j,i)
+            # get atom xyz
             xyz=pose.xyz(aid)
+            # apply rt to do the rotation and translation
             p=np.array([xyz.x,xyz.y,xyz.z])
+            # p-about: shift the coordinate system to 'about' point
+            # apply rotation R
+            # move it back to the original coordinate system and add translation t
+            # so that you can build the initial Cn around origin but rotate in a different center
             p2=apply_rt(p-about,R,about+t)
+            # set new xyz to pose
             pose.set_xyz(aid,rosetta.numeric.xyzVector_double_t(*p2))
 
 def extract_CA_coords(pose):
     # Extract CA atom coordinates as Nx3 numpy array
+    # It is simple but very useful when we need the geomtry of the pose
+    # e.g., compute helix axis, center, aligning, etc.
     arr=[]
     for i in range(1,pose.size()+1):
         a=pose.xyz(rosetta.core.id.AtomID(pose.residue(i).atom_index("CA"),i))
         arr.append([a.x,a.y,a.z])
     return np.array(arr)
 
+def principal_axis_of_pose(pose):
+    """Return the first principal component (unit vector) of CA coords."""
+    X = extract_CA_coords(pose)
+    # centered coordinates
+    Xc = X - X.mean(axis=0)
+    # NumPy’s SVD (Singular Value Decomposition) computes
+    # U:an N X 3 orthonormal matrix - left singular vectors (direction of variation in data)
+    # S: diagonal matrix of singular values (square roots of variance)
+    # Vt: 3 X 3 orthonormal matrix - right singular vectors (directions in coordinate space, same as eigenvectors of C), rows are principal directions
+    U, S, Vt = np.linalg.svd(Xc, full_matrices=False)
+    pc1 = Vt[0]  # principal direction (row vector)
+    return unit(pc1)
+
+def ends_axis_of_pose(pose):
+    """Return unit vector from first CA to last CA (fallback if <2 residues)."""
+    ca = extract_CA_coords(pose)
+    if len(ca) >= 2:
+        return unit(ca[-1] - ca[0])
+    return np.array([0.0, 0.0, 1.0], float)
+
+def align_pose_axis_to(pose, source_axis, target_axis, about_point):
+    """Rigidly rotate pose so source_axis aligns with target_axis, pivoting at about_point."""
+    a = unit(np.asarray(source_axis, float))
+    b = unit(np.asarray(target_axis, float))
+    v = np.cross(a, b)
+    s = np.linalg.norm(v)
+    c = float(np.dot(a, b))
+    if s < 1e-8:
+        # parallel or anti-parallel
+        if c > 0:  # already aligned
+            return
+        # 180°: rotate around any axis perpendicular to a
+        # pick a stable axis
+        ref = np.array([1.0, 0.0, 0.0])
+        if abs(np.dot(ref, a)) > 0.9:
+            ref = np.array([0.0, 1.0, 0.0])
+        axis = unit(np.cross(a, ref))
+        R = rotmat_axis_angle(axis, 180.0)
+    else:
+        axis = v / s
+        angle = math.degrees(math.atan2(s, c))
+        R = rotmat_axis_angle(axis, angle)
+    transform_pose(pose, R=R, about=np.asarray(about_point, float))
+
+
 def load_seed_pose_from_pdb(pdb_path: str, chain: str = "", pdb_range: str = "") -> rosetta.core.pose.Pose:
     """
     Load a PDB into a Pose. Optionally slice a single continuous segment by PDB chain/id range.
     - chain: PDB chain ID like "A". If empty, and a range is given, we try to infer the first residue's chain.
-    - pdb_range: "start-end" in PDB residue numbering (e.g., "5-42"). If empty, take the whole (chain) pose.
+    - pdb_range: e.g., "5-42". If empty, take the whole (chain) pose.
     Returns a Pose; no torsions are modified. You can rigid-body it downstream as usual.
     """
     if not os.path.exists(pdb_path):
@@ -246,9 +310,49 @@ def load_seed_pose_from_pdb(pdb_path: str, chain: str = "", pdb_range: str = "")
     return pose
 
 # =========================================================
-# Cn / screw
+# Cn
 # =========================================================
-def c_n_symmetry_place_pose(seed,n,sym_axis_vec,center_vec,radius_xy,start_angle_deg,global_tilt_deg,local_roll_deg):
+def c_n_symmetry_place_pose(seed,n,sym_axis_vec,center_vec,radius_xy,
+                            start_angle_deg,global_tilt_deg,local_roll_deg):
+    """_summary_
+        Generate Cn symmetry copies of a seed Pose (e.g. helix or import pdb)
+        arranged evenly around a defined symmetry axis. Each copy can have a
+        local roll (twist about the axis) and/or a global tilt (lean away from
+        the axis) applied to it.
+
+    Args:
+        seed (rosetta.core.pose.Pose): 
+            The input Pose used as the repeating unit for symmetry placement.
+
+        n (int): 
+            Number of symmetric subunits (Cn order). If n=0, returns empty list
+            so no symmetry is applied.
+
+        sym_axis_vec (array-like or list of float): 
+            Direction vector of the symmetry axis (e.g., [0,0,1] for Z-axis).
+
+        center_vec (array-like or list of float): 
+            3D coordinates of the symmetry axis origin (center of rotation, default: [0,0,0]).
+
+        radius_xy (float): 
+            Distance (Å) from the symmetry axis to the center of each subunit.
+
+        start_angle_deg (float): 
+            Starting angular offset (degrees) for the first subunit around the axis.
+
+        global_tilt_deg (float): 
+            Tilt angle (degrees) of each subunit away from the radial plane,
+            producing “flower” or “umbrella”-like arrangements.
+
+        local_roll_deg (float): 
+            Additional rotation (degrees) applied to each subunit about the 
+            symmetry axis before placement — similar to a helical rotation.
+
+    Returns:
+        list[rosetta.core.pose.Pose]: 
+            List of Pose objects corresponding to the n placed subunits in the 
+            generated Cₙ symmetric ring.
+    """
     # Place n copies of seed pose in Cn symmetry
     sym_axis=unit(np.array(sym_axis_vec,float))
     # Compute orthonormal basis
@@ -284,30 +388,6 @@ def c_n_symmetry_place_pose(seed,n,sym_axis_vec,center_vec,radius_xy,start_angle
         chains.append(P)
     return chains
 
-def project_point_to_axis(point, axis_point, axis_dir):
-    # 投影点到“过 axis_point、方向 axis_dir 的直线”上
-    u = unit(axis_dir)
-    return axis_point + u * np.dot(point - axis_point, u)
-
-def make_screw_repeats_pose(seed, repeats, delta_rot_deg, delta_shift,
-                            screw_axis_vec, screw_axis_point=None, about=None):
-    screw_axis = unit(np.array(screw_axis_vec, float))
-    c = pose_center_CA(seed)
-
-    #FIX: use global axis center if provided, instead of the seed centroid
-    if screw_axis_point is None:
-        screw_axis_point = np.zeros(3)   # global origin (axis passes through 0,0,0)
-    # --------------------------------------
-
-    out = []
-    for j in range(repeats):
-        P = seed.clone()
-        R = rotmat_axis_angle(screw_axis, delta_rot_deg * j)
-        t = screw_axis * (delta_shift * j)
-        transform_pose(P, R=R, t=t, about=screw_axis_point)
-        out.append(P)
-    return out
-
 # =========================================================
 # Rotation about arbitrary axis, reflection, dihedral, ring stacking
 # =========================================================
@@ -331,7 +411,7 @@ def make_dihedral_extension(
     dihedral_twist_deg=0.0,
     sym_axis_vec=None,
     # NEW post-reflection rigid-body controls:
-    post_twist_deg=0.0,    # extra rotate about sym_axis
+    #post_twist_deg=0.0,    # extra rotate about sym_axis
     post_shift_z=0.0,      # extra translate along sym_axis
     post_delta_r=0.0,      # extra radial expansion from center
     post_yaw_deg=0.0       # extra rotate about dihedral_axis
@@ -341,7 +421,6 @@ def make_dihedral_extension(
       1) 180° rotation about dihedral_axis through center_point (C2)
       2) optional interdigitation twist about sym_axis by dihedral_twist_deg
       3) NEW: optional extra rigid ops applied to reflected partners only:
-         - rotate about sym_axis by post_twist_deg
          - translate along sym_axis by post_shift_z
          - translate radially outward by post_delta_r
          - rotate about dihedral_axis by post_yaw_deg
@@ -363,8 +442,8 @@ def make_dihedral_extension(
             rotate_about_axis(q, U, dihedral_twist_deg, C)
 
         # (3a) NEW: rotate around sym_axis (post_twist)
-        if U is not None and abs(post_twist_deg) > 1e-9:
-            rotate_about_axis(q, U, post_twist_deg, C)
+        #if U is not None and abs(post_twist_deg) > 1e-9:
+        #    rotate_about_axis(q, U, post_twist_deg, C)
 
         # (3b) NEW: rotate around dihedral axis (post_yaw)
         if abs(post_yaw_deg) > 1e-9:
@@ -439,8 +518,6 @@ def build_out_filename(base_name:str, params:dict) -> str:
         tags.append(f"tilt-{params['global_tilt_deg']:.1f}")
     if abs(params.get("local_roll_deg",0)) > 1e-6:
         tags.append(f"roll-{params['local_roll_deg']:.1f}")
-    if params.get("screw_repeats",0)>0:
-        tags.append(f"screw-{params['screw_repeats']}")
     tag_str = "__" + "__".join(tags) if tags else ""
     return f"{base}{tag_str}{ext}"
 
@@ -470,52 +547,90 @@ def main(config_path="config_helix.json"):
     cfg = load_config_json(config_path)
     globals().update(cfg)
     init_pyrosetta()
-    # Build seed: either import PDB or build an ideal helix
+
+    # ============================================================
+    #Build seed: either import PDB or build an ideal helix
+    # ============================================================
     if input_pdb_path:
         print(f"[INFO] Using user PDB as seed: {input_pdb_path} (chain='{input_chain}', range='{input_pdb_range}')")
         seed = load_seed_pose_from_pdb(input_pdb_path, chain=input_chain, pdb_range=input_pdb_range)
+
+        # --- Optional: align the imported PDB's own axis to a desired target axis ---
+        if 'input_axis_mode' in globals():
+            # detect the input axis
+            if input_axis_mode == "auto_pca":
+                src_axis = principal_axis_of_pose(seed)
+            elif input_axis_mode == "auto_ends":
+                src_axis = ends_axis_of_pose(seed)
+            elif input_axis_mode == "explicit":
+                src_axis = unit(v3(input_axis_hint))
+            else:
+                print(f"[WARN] Unknown input_axis_mode='{input_axis_mode}', fallback to auto_ends.")
+                src_axis = ends_axis_of_pose(seed)
+
+            tgt_axis = unit(v3(input_target_axis)) if 'input_target_axis' in globals() else unit(v3(helix_axis))
+
+            # optional flip if nearly opposite
+            if 'input_flip_if_opposite' in globals() and input_flip_if_opposite:
+                if np.dot(src_axis, tgt_axis) < 0:
+                    src_axis = -src_axis
+
+            c_seed = pose_center_CA(seed)
+            align_pose_axis_to(seed, src_axis, tgt_axis, about_point=c_seed)
+
+            # optional roll around the new axis
+            if 'input_pre_roll_deg' in globals() and abs(input_pre_roll_deg) > 1e-6:
+                R_roll = rotmat_axis_angle(tgt_axis, input_pre_roll_deg)
+                transform_pose(seed, R=R_roll, about=c_seed)
+
+            # optional recenter after alignment
+            if 'input_center_to' in globals() and input_center_to:
+                if input_center_to == "sym_center":
+                    target_center = v3(sym_center)
+                elif input_center_to == "none":
+                    target_center = None
+                else:
+                    target_center = v3(input_center_to)
+                if target_center is not None:
+                    shift = np.asarray(target_center, float) - pose_center_CA(seed)
+                    transform_pose(seed, t=shift)
+
     else:
         seed = build_ideal_helix_pose(helix_len, "A")
 
-    # Align helix axis to target axis
-    ca=extract_CA_coords(seed)
-    # Compute current and target axes
-    curr_axis=unit(ca[-1]-ca[0]) if len(ca)>=2 else np.array([0,0,1])
-    # Compute rotation axis and angle
-    target=unit(v3(helix_axis))
-    # rotation axis
-    v=np.cross(curr_axis,target)
-    # rotation angle
-    s=np.linalg.norm(v)
-    # cos angle
-    c=float(np.dot(curr_axis,target))
-    # rotation matrix
-    R_align=np.eye(3) if s<1e-8 and c>0 else rotmat_axis_angle(v/s if s>1e-8 else (1,0,0),math.degrees(math.atan2(s,c)))
-    # Apply alignment
-    center=pose_center_CA(seed)
-    # First align, then translate to helix_start
-    transform_pose(seed,R=R_align,about=center)
-    # then translate
-    transform_pose(seed,t=v3(helix_start)-pose_center_CA(seed))
-    # Apply local alignment if specified
-    if local_align_axis and abs(local_align_deg)>1e-6:
-        # Apply local alignment
-        R_local=rotmat_axis_angle(v3(local_align_axis),local_align_deg)
-        # Apply rotation about center
-        transform_pose(seed,R=R_local,about=pose_center_CA(seed))
+    # ============================================================
+    # Align helix axis to target axis (for ideal helix case)
+    # ============================================================
+    ca = extract_CA_coords(seed)
+    curr_axis = unit(ca[-1] - ca[0]) if len(ca) >= 2 else np.array([0, 0, 1])
+    target = unit(v3(helix_axis))
+    v = np.cross(curr_axis, target)
+    s = np.linalg.norm(v)
+    c = float(np.dot(curr_axis, target))
+    R_align = np.eye(3) if s < 1e-8 and c > 0 else rotmat_axis_angle(v/s if s > 1e-8 else (1, 0, 0), math.degrees(math.atan2(s, c)))
 
-    if sym_n>0:
-        # Apply Cn symmetry placement
-        chains=c_n_symmetry_place_pose(seed,sym_n,v3(sym_axis),v3(sym_center),
-                                       sym_radius,sym_start_angle,global_tilt_deg,local_roll_deg)
+    center = pose_center_CA(seed)
+    transform_pose(seed, R=R_align, about=center)
+    transform_pose(seed, t=v3(helix_start) - pose_center_CA(seed))
+
+    # optional local alignment
+    if local_align_axis and abs(local_align_deg) > 1e-6:
+        R_local = rotmat_axis_angle(v3(local_align_axis), local_align_deg)
+        transform_pose(seed, R=R_local, about=pose_center_CA(seed))
+
+    # ============================================================
+    # Symmetry, Dihedral, Stacking
+    # ============================================================
+    if sym_n > 0:
+        chains = c_n_symmetry_place_pose(seed, sym_n, v3(sym_axis), v3(sym_center),
+                                         sym_radius, sym_start_angle, global_tilt_deg, local_roll_deg)
     else:
-        base=seed.clone()
-        if abs(local_roll_deg)>1e-6:
-            # Apply local roll
-            Rr=rotmat_axis_angle(v3(sym_axis),local_roll_deg)
-            transform_pose(base,R=Rr,about=pose_center_CA(base))
-        chains=[base]
-        
+        base = seed.clone()
+        if abs(local_roll_deg) > 1e-6:
+            Rr = rotmat_axis_angle(v3(sym_axis), local_roll_deg)
+            transform_pose(base, R=Rr, about=pose_center_CA(base))
+        chains = [base]
+
     # --- Dihedral extension (C_n -> D_n) ---
     if dihedral_enable:
         chains = make_dihedral_extension(
@@ -524,12 +639,11 @@ def main(config_path="config_helix.json"):
             center_point=v3(sym_center),
             dihedral_twist_deg=dihedral_twist_deg,
             sym_axis_vec=v3(sym_axis),
-            post_twist_deg=dihedral_post_twist_deg,
+            #post_twist_deg=dihedral_post_twist_deg,
             post_shift_z=dihedral_post_shift_z,
             post_delta_r=dihedral_post_delta_r,
             post_yaw_deg=dihedral_post_yaw_deg
         )
-
 
     # --- Ring stacking / expansion ---
     if ring_stack_copies > 0:
@@ -543,32 +657,15 @@ def main(config_path="config_helix.json"):
             sym_center_point=v3(sym_center)
         )
 
-    # --- Screw extension ---
-    # 以前是：只对 chains[0] 做 screw 并覆盖
-    # 现在改成：对“每条链”做各自的 screw，并把它们拼起来
-    # 先在环上摆出 Cn，然后沿每条 helix 的“自身轴”各自向前拧出一串 screw 副本。
-    if screw_repeats > 0:
-        new_chains = []
-        for base in chains:
-            if screw_mode == "global":
-                axis_dir = v3(screw_axis)
-                axis_point = v3(sym_center)  # 全局轴穿过的点
-            else:
-                axis_dir = helix_axis_of_pose(base)
-                axis_point = pose_center_CA(base)
-                print("[INFO] 'per_chain' screw axis uses global axis for now.")
-            reps = make_screw_repeats_pose(
-                base, screw_repeats, screw_delta_deg, screw_delta_shift,
-                axis_dir, screw_axis_point=axis_point
-            )
-            new_chains.extend(reps)
-        chains = new_chains
 
-    # Output PDB
+    # ============================================================
+    #  Output
+    # ============================================================
     params = dict(sym_n=sym_n, sym_radius=sym_radius, global_tilt_deg=global_tilt_deg,
-                    local_roll_deg=local_roll_deg, screw_repeats=screw_repeats)
+                  local_roll_deg=local_roll_deg)
     tagged_pdb = build_out_filename(out_pdb, params)
     write_pdb_ca_multichain(chains, tagged_pdb, resname_disp=resname)
+
     print("\nPyMOL quick tips:")
     print("  load", tagged_pdb)
     print("  util.cbc; show sticks, all; orient; set stick_radius, 0.2")
