@@ -115,11 +115,11 @@ After loading:
 | `0,1,0`     | Y    | Green |
 | `1,0,0`     | X    | Red   |
 
-![Axis Alignment Example](f1.png)
+![Axis Alignment Example](20251031_parametric_design_playground/images/f1.png)
 
 * Adjust `roll_deg` (e.g., 0°, 30°, 60°, 90°, 120°) to visualize twisting around the selected axis:
 
-![Roll Comparison Example](f2.png)
+![Roll Comparison Example](20251031_parametric_design_playground/images/f2.png)
 
 ---
 
