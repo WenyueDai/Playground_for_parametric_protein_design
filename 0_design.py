@@ -32,6 +32,7 @@ import numpy as np
 import pyrosetta
 from pyrosetta import rosetta
 import hashlib
+import datetime
 
 # =========================================================
 # Default parameters
@@ -43,20 +44,20 @@ psi_deg = -47.0 # typical alpha-helix psi angle
 omega_deg = 180.0 # typical alpha-helix omega angle
 
 # --- Otherwise, use your own pdb ---
-input_pdb_path = ""      # empty string means "disabled"
+input_pdb_path = "8flx.pdb"      # empty string means "disabled"
 input_chain = ""         # "A"; empty means "use whole pose or infer"
 input_pdb_range = ""     # "5-42" in PDB numbering within the chosen chain; empty means "full chain"
 
 # --- Input parameters compatible for both de novo build or input pdb ---
 input_axis_mode = "auto_pca"      # "auto_pca" | "auto_ends" - use N-C end as axis which is much faster than PCA, could do poorly for short/curved segments
 input_target_axis = "0,0,1"        # DEFAULT: if None/""/"none", aligns to +Z (0,0,1); if a vector "x,y,z", aligns to that vector.
-roll_deg = 120           # roll around the (aligned) target axis
+roll_deg = 0           # roll around the (aligned) target axis
 
 # --- Cn symmetry parameters ---
-sym_n = 0 # number of symmetry units; 0 means no symmetry
+sym_n = 3 # number of symmetry units; 0 means no symmetry
 sym_axis = "0,0,1" # symmetry axis direction, default Z
 sym_center = "0,0,0" # symmetry center point
-sym_radius = 15.0 # radius from symmetry axis to helix center
+sym_radius = 30.0 # radius from symmetry axis to helix center
 sym_start_angle = 0.0 # starting angle for symmetry placement (azimuth of the first helix/pdb), like rotate the whole ring
 global_tilt_deg = 0.0 # tilt each helix away from sym_axis by this many degrees (lean in/out)
 
@@ -74,7 +75,7 @@ ring_delta_z = 0.0              # axial shift per ring (Å)
 ring_delta_twist_deg = 0.0      # extra azimuth per ring (deg)
 
 resname = "ALA"     # residue name to display in PDB
-out_pdb = "outs/helix_output_CA_only.pdb" # output PDB file path, hash tag will be added based on params
+out_pdb = "outs/8flx.pdb" # the bash path will be used as dictionary, filename will joined with hash key to save
 
 # =========================================================
 # Basic 3D operations
@@ -87,6 +88,18 @@ def unit(v):
     v=np.asarray(v,float)
     n=np.linalg.norm(v)
     return v if n==0 else v/n
+
+def v3(s):
+    # Convert comma-separated string (from json or global) to 3D vector
+    return np.array([float(x) for x in s.split(",")],float)
+
+def parse_axis(val):
+    # Accept None, "", "none", "None" as "no target"
+    if val is None:
+        return None
+    if isinstance(val, str) and val.strip().lower() in {"", "none"}:
+        return None
+    return unit(v3(val))  # otherwise, normalize the "x,y,z" string
 
 def rotmat_axis_angle(axis,angle_deg):
     """
@@ -112,24 +125,6 @@ def rotmat_axis_angle(axis,angle_deg):
                      [y*x*(1-c)+z*s,c+y*y*(1-c),y*z*(1-c)-x*s],
                      [z*x*(1-c)-y*s,z*y*(1-c)+x*s,c+z*z*(1-c)]])
 
-def apply_rt(X,R=None,t=None):
-    # Apply rotation and translation to 3D points
-    # X: Nx3 array of points
-    # R: 3x3 rotation matrix
-    # t: 3D translation vector
-    # X = np.array([[1, 0, 0]]) # one point at (1,0,0)
-    # R = np.array([[0,-1,0],[1,0,0],[0,0,1]]) # rotate 90° around Z
-    # t = np.array([0, 0, 1]) # shift up by 1 Å
-    # print(X @ R.T + t) [[0, 1, 1]]
-    X=np.asarray(X,float)
-    R=np.eye(3) if R is None else R
-    t=np.zeros(3) if t is None else t
-    return (X@R.T)+t
-
-def v3(s):
-    # Convert comma-separated string (from json or global) to 3D vector
-    return np.array([float(x) for x in s.split(",")],float)
-
 def load_config_json(path:str):
     if not os.path.exists(path): 
         print(f"[WARN] JSON config {path} not exist, use default."); return {}
@@ -137,14 +132,6 @@ def load_config_json(path:str):
         data=json.load(f)
     print(f"[OK] Read JSON config: {path}")
     return data
-
-def parse_axis(val):
-    # Accept None, "", "none", "None" as "no target"
-    if val is None:
-        return None
-    if isinstance(val, str) and val.strip().lower() in {"", "none"}:
-        return None
-    return unit(v3(val))  # otherwise, normalize the "x,y,z" string
 
 # =========================================================
 # PyRosetta operations
@@ -167,6 +154,18 @@ def build_ideal_helix_pose(n_res:int,aa="A"):
         pose.set_psi(i, psi_deg)
         pose.set_omega(i, omega_deg)
     return pose
+
+def assemble_as_multichain_pose(poses):
+    """
+    Combine a list of Poses (full-atom) into a single Pose with one chain per input Pose.
+    Uses append_pose_to_pose with new_chain=True so each Pose becomes its own chain.
+    """
+    if not poses:
+        raise ValueError("No poses to assemble.")
+    out = poses[0].clone()
+    for p in poses[1:]:
+        rosetta.core.pose.append_pose_to_pose(out, p, new_chain=True)
+    return out
 
 def load_seed_pose_from_pdb(pdb_path: str, chain: str = "", pdb_range: str = "") -> rosetta.core.pose.Pose:
     """
@@ -239,15 +238,9 @@ def extract_CA_coords(pose):
     return np.array(arr)
 
 def pose_center_CA(pose):
-    # Compute center of mass of CA atoms
-    xs = []
-    # Iterate over all residues, take the coordinates of CA atoms
-    for i in range(1, pose.size() + 1):
-        aid = rosetta.core.id.AtomID(pose.residue(i).atom_index("CA"), i)
-        v = pose.xyz(aid)
-        xs.append([v.x, v.y, v.z])
-    # Return mean position for all CA atoms
-    return np.mean(np.asarray(xs, dtype=float), axis=0)
+    # use extract_CA_coords to compute the center of mass of CA atoms
+    ca_coords = extract_CA_coords(pose)
+    return np.mean(ca_coords, axis=0)
 
 def transform_pose(pose,R=None,t=None,about=None):
     # Apply rotation R and translation t to the pose about point 'about' default as origin
@@ -269,7 +262,8 @@ def transform_pose(pose,R=None,t=None,about=None):
             # apply rotation R
             # move it back to the original coordinate system and add translation t
             # so that you can build the initial Cn around origin but rotate in a different center
-            p2=apply_rt(p-about,R,about+t)
+            # the formula is: p2 = R*(p - about) + about + t
+            p2 = (R @ (p - about)) + about + t
             # set new xyz to pose
             pose.set_xyz(aid,rosetta.numeric.xyzVector_double_t(*p2))
 
@@ -299,13 +293,19 @@ def ends_axis_of_pose(pose):
 def align_pose_axis_to(pose, source_axis, target_axis, about_point):
     """Rotate pose to align source_axis to target_axis about about_point."""
     if target_axis is None:
-        return  # explicitly skip alignment
+        return  # explicitly skip alignment, the input object will be defaulted to align to z-axis
 
     a = unit(np.asarray(source_axis, float))
     b = unit(np.asarray(target_axis, float))
     v = np.cross(a, b)
     s = np.linalg.norm(v)
     c = float(np.dot(a, b))
+    # Handle special cases
+    # 1) a and b are parallel (c=1)
+    # 2) a and b are anti-parallel (c=-1)
+    # In case (1), no rotation needed
+    # In case (2), pick any perpendicular axis to rotate 180°
+    # Otherwise, use axis-angle rotation
     if s < 1e-8:
         if c > 0:
             return
@@ -320,7 +320,6 @@ def align_pose_axis_to(pose, source_axis, target_axis, about_point):
         R = rotmat_axis_angle(axis, angle)
     transform_pose(pose, R=R, about=np.asarray(about_point, float))
 
-    
 # =========================================================
 # Cn
 # =========================================================
@@ -328,23 +327,12 @@ def c_n_symmetry_place_pose(seed, n, sym_axis_vec, center_vec, radius_xy,
                             start_angle_deg, global_tilt_deg):
     """
     Generate Cn symmetry copies of a seed Pose, arranged evenly around a defined symmetry axis.
-    Each copy can have a global tilt (lean away from the axis). The azimuthal phase of the ring
-    is controlled by `sym_start_angle`.
-    Args:
-        seed (...): repeating unit
-        n (int): Cn order
-        sym_axis_vec: direction of the symmetry axis (e.g., [0,0,1])
-        center_vec: axis origin (e.g., [0,0,0])
-        radius_xy (float): radius from axis to each subunit center
-        start_angle_deg (float): azimuthal phase of the first subunit
-        global_tilt_deg (float): tilt of each subunit away from the axis
-    Returns:
-        list[Pose]: the placed subunits
+    Each copy is rotated about the symmetry axis (true rotational symmetry) *and* placed around a ring.
     """
     sym_axis = unit(np.array(sym_axis_vec, float))
-    center   = np.array(center_vec, float)
-
-    tmp   = np.array([1,0,0]) if abs(np.dot([1,0,0], sym_axis)) < 0.9 else np.array([0,1,0])
+    center = np.array(center_vec, float)
+    # Build stable perpendicular axes for placement
+    tmp = np.array([1,0,0]) if abs(np.dot([1,0,0], sym_axis)) < 0.9 else np.array([0,1,0])
     x_dir = unit(np.cross(sym_axis, tmp))
     y_dir = unit(np.cross(sym_axis, x_dir))
 
@@ -353,27 +341,42 @@ def c_n_symmetry_place_pose(seed, n, sym_axis_vec, center_vec, radius_xy,
 
     for k in range(n):
         ang = start_angle_deg + 360.0 * k / n
+        # compute radial direction in XY plane
         radial = math.cos(math.radians(ang)) * x_dir + math.sin(math.radians(ang)) * y_dir
+        # compute placement point
         place = center + radius_xy * radial
 
         P = base.clone()
+
+        # (1) Rotate subunit by the same azimuthal angle about the symmetry axis
+        R_rot = rotmat_axis_angle(sym_axis, ang)
+        transform_pose(P, R=R_rot, about=center)
+
+        # (2) Translate to the ring position
         c0 = pose_center_CA(P)
         transform_pose(P, t=place - c0)
 
+        # (3) Apply global tilt if needed (lean away from axis)
         if abs(global_tilt_deg) > 1e-6:
             tangent = unit(np.cross(sym_axis, radial))
             R_tilt = rotmat_axis_angle(tangent, global_tilt_deg)
             transform_pose(P, R=R_tilt, about=place)
 
         chains.append(P)
+
     return chains
 
-
 # =========================================================
-# Rotation about arbitrary axis, reflection, dihedral, ring stacking
+# Dihedral extensions
 # =========================================================
 def decompose_along_axis(vec, axis_dir, axis_point):
-    """Return (axis_component, radial_component) of vec relative to a line with direction axis_dir through axis_point."""
+    """
+    Return (axis_component, radial_component) of vec relative to a line with direction axis_dir through axis_point.
+    If v = [3, 4, 5], u = [0, 0, 1],
+    then np.dot(v, u) = 5
+    and axis_comp = 5 * [0, 0, 1] = [0, 0, 5].
+    radial_comp = [3, 4, 5] - [0, 0, 5] = [3, 4, 0]
+    """
     u = unit(np.asarray(axis_dir, float))
     v = np.asarray(vec, float) - np.asarray(axis_point, float)
     axis_comp = np.dot(v, u) * u
@@ -387,22 +390,19 @@ def rotate_about_axis(pose, axis_dir, angle_deg, about_point):
 
 def make_dihedral_extension(
     chains,
-    dihedral_axis_vec,
+    dihedral_axis_vec, # axis for 180° reflection
     center_point,
-    dihedral_twist_deg=0.0,
-    sym_axis_vec=None,
-    # NEW post-reflection rigid-body controls:
-    #post_twist_deg=0.0,    # extra rotate about sym_axis
+    dihedral_twist_deg=0.0, # twist about sym_axis after reflection
+    sym_axis_vec=None,     # symmetry axis for twist
     post_shift_z=0.0,      # extra translate along sym_axis
     post_delta_r=0.0,      # extra radial expansion from center
-):
+    ) -> List[rosetta.core.pose.Pose]:
     """
     Build Dn partner set from a Cn ring:
       1) 180° rotation about dihedral_axis through center_point (C2)
       2) optional interdigitation twist about sym_axis by dihedral_twist_deg
-      3) NEW: optional extra rigid ops applied to reflected partners only:
-         - translate along sym_axis by post_shift_z
-         - translate radially outward by post_delta_r
+      3) translate along sym_axis by post_shift_z
+      4) translate radially outward by post_delta_r
     Returns original chains + transformed partners.
     """
     out = list(chains)
@@ -420,15 +420,15 @@ def make_dihedral_extension(
         if U is not None and abs(dihedral_twist_deg) > 1e-9:
             rotate_about_axis(q, U, dihedral_twist_deg, C)
 
-        # (3a) NEW: rotate around sym_axis (post_twist)
+        # (3a) rotate around sym_axis (post_twist)
         #if U is not None and abs(post_twist_deg) > 1e-9:
         #    rotate_about_axis(q, U, post_twist_deg, C)
 
-        # (3c) NEW: translate along sym_axis (post_shift_z)
+        # (3c) translate along sym_axis (post_shift_z)
         if U is not None and abs(post_shift_z) > 1e-12:
             transform_pose(q, t=U * post_shift_z)
 
-        # (3d) NEW: push radially outward from center by post_delta_r
+        # (3d) push radially outward from center by post_delta_r
         if abs(post_delta_r) > 1e-12:
             c0 = pose_center_CA(q)
             # radial dir = component of (c0 - C) perpendicular to U (if U present), else just from C to c0
@@ -448,6 +448,9 @@ def make_dihedral_extension(
 
     return out
 
+# =========================================================
+# Stack rings
+# =========================================================
 
 def stack_rings(chains, copies, delta_radius, delta_z, delta_twist_deg, sym_axis_vec, sym_center_point):
     """
@@ -467,10 +470,11 @@ def stack_rings(chains, copies, delta_radius, delta_z, delta_twist_deg, sym_axis
     for i in range(1, copies + 1):
         for p in chains:
             q = p.clone()
-            # current center and its radial direction
+            # current center of mass
             c0 = pose_center_CA(q)
             axis_comp, radial_comp = decompose_along_axis(c0, u, C)
             radial_dir = radial_comp
+            # ensure radial_dir is not zero
             if np.linalg.norm(radial_dir) < 1e-12:
                 radial_dir = np.cross(u, np.array([1.0, 0.0, 0.0]))
                 if np.linalg.norm(radial_dir) < 1e-12:
@@ -488,7 +492,7 @@ def stack_rings(chains, copies, delta_radius, delta_z, delta_twist_deg, sym_axis
 # =========================================================
 # Output
 # =========================================================
-def build_out_filename(base_name: str, params: dict, max_basename_len: int = 20) -> str:
+def build_out_filename(base_name: str, params: dict, max_basename_len: int = 10) -> str:
     """
     Build an output filename that encodes *all* parameters.
     - Compact numeric formatting
@@ -529,18 +533,19 @@ def build_out_filename(base_name: str, params: dict, max_basename_len: int = 20)
     tag_str = "__" + "__".join(tokens) if tokens else ""
     candidate = f"{base}{tag_str}{ext}"
 
+    # create an empty dictionary to save candidate filenames and hashkey
+    candidate_dict = {}
     # Guard against very long basenames (common FS limit ~255)
     bn = os.path.basename(candidate)
     if len(bn) > max_basename_len:
-        short_hash = hashlib.md5(json.dumps(params, sort_keys=True).encode()).hexdigest()[:8]
-        # Try to trim the middle of the tag_str keeping start/end context
-        keep = max_basename_len - len(os.path.basename(base)) - len(ext) - len("__") - len(short_hash) - 2
-        keep = max(keep, 16)  # ensure some context remains
-        head = tag_str[: keep // 2]
-        tail = tag_str[-(keep - len(head)) :]
-        tag_str = f"{head}__{short_hash}__{tail}"
-        candidate = f"{base}{tag_str}{ext}"
-
+        short_hash = hashlib.md5(json.dumps(params, sort_keys=True).encode()).hexdigest()[:20]
+        # save the candidate filename and hashkey to dictionary
+        candidate_dict[candidate] = short_hash
+        # save the dictionary to a json file
+        with open(f"filename_hash.json", "a") as f:
+            # dump the date and time into the json file
+            json.dump({"date": str(datetime.datetime.now()), "files": candidate_dict}, f, indent=2)
+        candidate = f"{base}_hash-{short_hash}{ext}"
     return candidate
 
 def write_pdb_ca_multichain(poses,out_pdb,resname_disp="ALA",start_resid=1):
@@ -669,11 +674,24 @@ def main(config_path="config_helix.json"):
     )
 
     tagged_pdb = build_out_filename(out_pdb, params)
-    write_pdb_ca_multichain(chains, tagged_pdb, resname_disp=resname)
 
-    print("\nPyMOL quick tips:")
-    print("  load", tagged_pdb)
-    print("  util.cbc; show sticks, all; orient; set stick_radius, 0.2")
+    # Decide how to write:
+    # - If we imported a PDB, preserve native residue types & side chains (full-atom PDB).
+    # - If we built de novo, keep Ala-only (CA-only file as before).
+    imported_seed = bool(input_pdb_path)  # non-empty path means we loaded from PDB
+
+    if imported_seed:
+        # Full-atom, preserve residue names & side chains
+        assembled = assemble_as_multichain_pose(chains)
+        os.makedirs(os.path.dirname(tagged_pdb) or ".", exist_ok=True)
+        rosetta.core.io.pdb.dump_pdb(assembled, tagged_pdb)
+        print(f"[OK] Wrote full-atom multichain PDB preserving side chains to {tagged_pdb}")
+    else:
+        # De novo Ala helix: CA-only with ALA residue label (your original behavior)
+        write_pdb_ca_multichain(chains, tagged_pdb, resname_disp="ALA")
+        print(f"[OK] Wrote CA-only ALA multichain PDB to {tagged_pdb}")
+
+    print(f"[DONE] Total chains: {len(chains)}")
 
 if __name__=="__main__":
     import sys
