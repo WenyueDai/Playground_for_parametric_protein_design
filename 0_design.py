@@ -26,6 +26,10 @@ Usage:
   python sym_helix_extended_pyrosetta.py
 """
 
+# TODO: Check Cx symmetric about translation and rotation for individual chains (should be rotated or not)
+# TODO: Continue testing with debugging
+# TODO: Continue write README
+
 import os, math, json, string
 from typing import List, Tuple
 import numpy as np
