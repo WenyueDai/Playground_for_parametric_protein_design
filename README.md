@@ -81,7 +81,7 @@ out_pdb = "outs/helix_output_CA_only.pdb" # output PDB file path, hash tag will 
 
 ---
 
-## Input Structure Generation
+## 1. Input Structure Generation
 
 There are **two ways** to generate the initial structure:
 
@@ -104,7 +104,7 @@ After loading:
 
 ---
 
-## Practical Exploration Tips
+### Practical Exploration Tips
 
 * Disable PDB input and use helix generation only.
 * Experiment with `input_target_axis` values:
