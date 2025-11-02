@@ -115,11 +115,15 @@ After loading:
 | `0,1,0`     | Y    | Green |
 | `1,0,0`     | X    | Red   |
 
-![Axis Alignment Example](images/f1.png)
+<p align="center">
+  <img src="images/f1.png" alt="Axis Alignment Example" width="400">
+</p>
 
 * Adjust `roll_deg` (e.g., 0°, 30°, 60°, 90°, 120°) to visualize twisting around the selected axis:
 
-![Roll Comparison Example](images/f2.png)
+<p align="center">
+  <img src="images/f2.png" alt="Roll Comparison Example" width="400">
+</p>
 
 ---
 
