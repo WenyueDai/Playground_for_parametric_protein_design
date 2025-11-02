@@ -35,12 +35,10 @@ input_pdb_path = ""      # empty string means "disabled"
 input_chain = ""         # "A"; empty means "use whole pose or infer"
 input_pdb_range = ""     # "5-42" in PDB numbering within the chosen chain; empty means "full chain"
 # --- Imported-PDB axis controls (so imported PDBs can be aimed like ideal helices) ---
-input_axis_mode = "auto_pca"      # "auto_pca" | "auto_ends" | "explicit"
-input_axis_hint = "0,0,1"         # used only if input_axis_mode == "explicit"
-input_target_axis = "0,0,1"       # where to point the imported fragment’s long axis
-input_pre_roll_deg = 0.0          # roll around the (aligned) target axis
-input_center_to = "none"          # "none" | "sym_center" | "x,y,z"
-input_flip_if_opposite = True     # flip source axis if ~180° to target (for minimal rotation)
+input_axis_mode = "auto_pca"      # "auto_pca" | "auto_ends"
+input_target_axis = "0,0,1"        # if it is not none, align the detected principal axis to this target axis (z-axis default). Otherwise it can be "none", ""
+input_pre_roll_deg = 0.0           # roll around the (aligned) target axis
+input_center_to = "none"           # "none" | "sym_center" | "x,y,z"
 
 
 # --- Local alignment parameters ---
@@ -137,8 +135,16 @@ def load_config_json(path:str):
     print(f"[OK] Read JSON config: {path}")
     return data
 
+def parse_axis(val):
+    # Accept None, "", "none", "None" as "no target"
+    if val is None:
+        return None
+    if isinstance(val, str) and val.strip().lower() in {"", "none"}:
+        return None
+    return unit(v3(val))  # otherwise, normalize the "x,y,z" string
+
 # =========================================================
-# PyRosetta 操作
+# PyRosetta operations
 # =========================================================
 def init_pyrosetta(): 
     # mute start messages
@@ -158,96 +164,6 @@ def build_ideal_helix_pose(n_res:int,aa="A"):
         pose.set_psi(i, psi_deg)
         pose.set_omega(i, omega_deg)
     return pose
-
-def pose_center_CA(pose):
-    # Compute center of mass of CA atoms
-    xs = []
-    # Iterate over all residues, take the coordinates of CA atoms
-    for i in range(1, pose.size() + 1):
-        aid = rosetta.core.id.AtomID(pose.residue(i).atom_index("CA"), i)
-        v = pose.xyz(aid)
-        xs.append([v.x, v.y, v.z])
-    # Return mean position for all CA atoms
-    return np.mean(np.asarray(xs, dtype=float), axis=0)
-
-def transform_pose(pose,R=None,t=None,about=None):
-    # Apply rotation R and translation t to the pose about point 'about' default as origin
-    R=np.eye(3) if R is None else R
-    t=np.zeros(3) if t is None else t
-    about=np.zeros(3) if about is None else about
-    # For all the residue in pose
-    for i in range(1,pose.size()+1):
-        rsd=pose.residue(i)
-        # For all the atom in residue
-        for j in range(1,rsd.natoms()+1):
-            # get atom id
-            aid=rosetta.core.id.AtomID(j,i)
-            # get atom xyz
-            xyz=pose.xyz(aid)
-            # apply rt to do the rotation and translation
-            p=np.array([xyz.x,xyz.y,xyz.z])
-            # p-about: shift the coordinate system to 'about' point
-            # apply rotation R
-            # move it back to the original coordinate system and add translation t
-            # so that you can build the initial Cn around origin but rotate in a different center
-            p2=apply_rt(p-about,R,about+t)
-            # set new xyz to pose
-            pose.set_xyz(aid,rosetta.numeric.xyzVector_double_t(*p2))
-
-def extract_CA_coords(pose):
-    # Extract CA atom coordinates as Nx3 numpy array
-    # It is simple but very useful when we need the geomtry of the pose
-    # e.g., compute helix axis, center, aligning, etc.
-    arr=[]
-    for i in range(1,pose.size()+1):
-        a=pose.xyz(rosetta.core.id.AtomID(pose.residue(i).atom_index("CA"),i))
-        arr.append([a.x,a.y,a.z])
-    return np.array(arr)
-
-def principal_axis_of_pose(pose):
-    """Return the first principal component (unit vector) of CA coords."""
-    X = extract_CA_coords(pose)
-    # centered coordinates
-    Xc = X - X.mean(axis=0)
-    # NumPy’s SVD (Singular Value Decomposition) computes
-    # U:an N X 3 orthonormal matrix - left singular vectors (direction of variation in data)
-    # S: diagonal matrix of singular values (square roots of variance)
-    # Vt: 3 X 3 orthonormal matrix - right singular vectors (directions in coordinate space, same as eigenvectors of C), rows are principal directions
-    U, S, Vt = np.linalg.svd(Xc, full_matrices=False)
-    pc1 = Vt[0]  # principal direction (row vector)
-    return unit(pc1)
-
-def ends_axis_of_pose(pose):
-    """Return unit vector from first CA to last CA (fallback if <2 residues)."""
-    ca = extract_CA_coords(pose)
-    if len(ca) >= 2:
-        return unit(ca[-1] - ca[0])
-    return np.array([0.0, 0.0, 1.0], float)
-
-def align_pose_axis_to(pose, source_axis, target_axis, about_point):
-    """Rigidly rotate pose so source_axis aligns with target_axis, pivoting at about_point."""
-    a = unit(np.asarray(source_axis, float))
-    b = unit(np.asarray(target_axis, float))
-    v = np.cross(a, b)
-    s = np.linalg.norm(v)
-    c = float(np.dot(a, b))
-    if s < 1e-8:
-        # parallel or anti-parallel
-        if c > 0:  # already aligned
-            return
-        # 180°: rotate around any axis perpendicular to a
-        # pick a stable axis
-        ref = np.array([1.0, 0.0, 0.0])
-        if abs(np.dot(ref, a)) > 0.9:
-            ref = np.array([0.0, 1.0, 0.0])
-        axis = unit(np.cross(a, ref))
-        R = rotmat_axis_angle(axis, 180.0)
-    else:
-        axis = v / s
-        angle = math.degrees(math.atan2(s, c))
-        R = rotmat_axis_angle(axis, angle)
-    transform_pose(pose, R=R, about=np.asarray(about_point, float))
-
 
 def load_seed_pose_from_pdb(pdb_path: str, chain: str = "", pdb_range: str = "") -> rosetta.core.pose.Pose:
     """
@@ -309,6 +225,99 @@ def load_seed_pose_from_pdb(pdb_path: str, chain: str = "", pdb_range: str = "")
 
     return pose
 
+def extract_CA_coords(pose):
+    # Extract CA atom coordinates as Nx3 numpy array
+    # It is simple but very useful when we need the geomtry of the pose
+    # e.g., compute helix axis, center, aligning, etc.
+    arr=[]
+    for i in range(1,pose.size()+1):
+        a=pose.xyz(rosetta.core.id.AtomID(pose.residue(i).atom_index("CA"),i))
+        arr.append([a.x,a.y,a.z])
+    return np.array(arr)
+
+def pose_center_CA(pose):
+    # Compute center of mass of CA atoms
+    xs = []
+    # Iterate over all residues, take the coordinates of CA atoms
+    for i in range(1, pose.size() + 1):
+        aid = rosetta.core.id.AtomID(pose.residue(i).atom_index("CA"), i)
+        v = pose.xyz(aid)
+        xs.append([v.x, v.y, v.z])
+    # Return mean position for all CA atoms
+    return np.mean(np.asarray(xs, dtype=float), axis=0)
+
+def transform_pose(pose,R=None,t=None,about=None):
+    # Apply rotation R and translation t to the pose about point 'about' default as origin
+    R=np.eye(3) if R is None else R
+    t=np.zeros(3) if t is None else t
+    about=np.zeros(3) if about is None else about
+    # For all the residue in pose
+    for i in range(1,pose.size()+1):
+        rsd=pose.residue(i)
+        # For all the atom in residue
+        for j in range(1,rsd.natoms()+1):
+            # get atom id
+            aid=rosetta.core.id.AtomID(j,i)
+            # get atom xyz
+            xyz=pose.xyz(aid)
+            # apply rt to do the rotation and translation
+            p=np.array([xyz.x,xyz.y,xyz.z])
+            # p-about: shift the coordinate system to 'about' point
+            # apply rotation R
+            # move it back to the original coordinate system and add translation t
+            # so that you can build the initial Cn around origin but rotate in a different center
+            p2=apply_rt(p-about,R,about+t)
+            # set new xyz to pose
+            pose.set_xyz(aid,rosetta.numeric.xyzVector_double_t(*p2))
+
+# =========================================================
+# Pose axis computations
+# =========================================================
+def principal_axis_of_pose(pose):
+    """Return the first principal component (unit vector) of CA coords."""
+    X = extract_CA_coords(pose)
+    # centered coordinates
+    Xc = X - X.mean(axis=0)
+    # NumPy’s SVD (Singular Value Decomposition) computes
+    # U:an N X 3 orthonormal matrix - left singular vectors (direction of variation in data)
+    # S: diagonal matrix of singular values (square roots of variance)
+    # Vt: 3 X 3 orthonormal matrix - right singular vectors (directions in coordinate space, same as eigenvectors of C), rows are principal directions
+    U, S, Vt = np.linalg.svd(Xc, full_matrices=False)
+    pc1 = Vt[0]  # principal direction (row vector)
+    return unit(pc1)
+
+def ends_axis_of_pose(pose):
+    """Return unit vector from first CA to last CA (fallback if <2 residues)."""
+    ca = extract_CA_coords(pose)
+    if len(ca) >= 2:
+        return unit(ca[-1] - ca[0])
+    return np.array([0.0, 0.0, 1.0], float)
+
+def align_pose_axis_to(pose, source_axis, target_axis, about_point):
+    """Rotate pose to align source_axis to target_axis about about_point."""
+    if target_axis is None:
+        return  # explicitly skip alignment
+
+    a = unit(np.asarray(source_axis, float))
+    b = unit(np.asarray(target_axis, float))
+    v = np.cross(a, b)
+    s = np.linalg.norm(v)
+    c = float(np.dot(a, b))
+    if s < 1e-8:
+        if c > 0:
+            return
+        ref = np.array([1.0, 0.0, 0.0])
+        if abs(np.dot(ref, a)) > 0.9:
+            ref = np.array([0.0, 1.0, 0.0])
+        axis = unit(np.cross(a, ref))
+        R = rotmat_axis_angle(axis, 180.0)
+    else:
+        axis = v / s
+        angle = math.degrees(math.atan2(s, c))
+        R = rotmat_axis_angle(axis, angle)
+    transform_pose(pose, R=R, about=np.asarray(about_point, float))
+
+    
 # =========================================================
 # Cn
 # =========================================================
@@ -557,26 +566,23 @@ def main(config_path="config_helix.json"):
 
         # --- Optional: align the imported PDB's own axis to a desired target axis ---
         if 'input_axis_mode' in globals():
-            # detect the input axis
+            # Pick source axis (as you already do)
             if input_axis_mode == "auto_pca":
                 src_axis = principal_axis_of_pose(seed)
             elif input_axis_mode == "auto_ends":
                 src_axis = ends_axis_of_pose(seed)
-            elif input_axis_mode == "explicit":
-                src_axis = unit(v3(input_axis_hint))
             else:
                 print(f"[WARN] Unknown input_axis_mode='{input_axis_mode}', fallback to auto_ends.")
                 src_axis = ends_axis_of_pose(seed)
 
-            tgt_axis = unit(v3(input_target_axis)) if 'input_target_axis' in globals() else unit(v3(helix_axis))
-
-            # optional flip if nearly opposite
-            if 'input_flip_if_opposite' in globals() and input_flip_if_opposite:
-                if np.dot(src_axis, tgt_axis) < 0:
-                    src_axis = -src_axis
-
-            c_seed = pose_center_CA(seed)
-            align_pose_axis_to(seed, src_axis, tgt_axis, about_point=c_seed)
+            # Decide target axis (can be None = skip)
+            tgt_axis = parse_axis(globals().get("input_target_axis", None))
+            if tgt_axis is None:
+                # no-op: keep the pose orientation as-is
+                pass
+            else:
+                c_seed = pose_center_CA(seed)
+                align_pose_axis_to(seed, src_axis, tgt_axis, about_point=c_seed)
 
             # optional roll around the new axis
             if 'input_pre_roll_deg' in globals() and abs(input_pre_roll_deg) > 1e-6:
