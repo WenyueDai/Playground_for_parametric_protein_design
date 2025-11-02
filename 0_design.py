@@ -44,7 +44,7 @@ psi_deg = -47.0 # typical alpha-helix psi angle
 omega_deg = 180.0 # typical alpha-helix omega angle
 
 # --- Otherwise, use your own pdb ---
-input_pdb_path = "8flx.pdb"      # empty string means "disabled"
+input_pdb_path = "/home/eva/20251031_parametric_design_playground/8flx.pdb"      # empty string means "disabled"
 input_chain = ""         # "A"; empty means "use whole pose or infer"
 input_pdb_range = ""     # "5-42" in PDB numbering within the chosen chain; empty means "full chain"
 
