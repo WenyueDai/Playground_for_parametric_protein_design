@@ -14,6 +14,24 @@ For β-meander and greek key, the strands are not directly paired -> CST_CA_SD s
 
 For more complicated design, check 0_cpl_motif_contact_map.py, which is created by applying contact map constraints.
 
+2. For helix-turn-helix-turn-helix, it is much more complicated because just adding CA-CA harmonic constrain is not good enough due to the 
+presence of two loops. What is needed:
+
+-1 constrain on helix secondary structure: 
+-- Apply ϕ/ψ dihedral constraints (DihedralConstraint with CircularHarmonicFunc); 
+-- Add helix geometry constrain:
+-- -- CA(i) - CA(i/4) distances (enforce local helix pitch).
+-- -- N(i+4) - O(i) pseudo-H-bonds for H-bond geometry.
+
+-2 loop closure using CCDLoopClosureMover.
+
+-3 3 Step of minimization to ensure structure is realisic 
+-- Strong coordinate and pair constrains; high chainbreak penalty to seal the loop
+-- Relaxed constrained, refine loop geometry.
+-- whole pose minimization
+
+-4 Use crick parameters to construct helix bundles, flip the middle helix to antiparallel.
+
 Usage:
   conda activate pyrosetta
   python small_motif_factory.py
