@@ -1,0 +1,71 @@
+{
+  "date": "2025-11-02 17:48:55.190100",
+  "files": {
+    "outs/8flx__dihedral_axis-1_0_0__dihedral_enable-0__dihedral_post_delta_r-0__dihedral_post_shift_z-0__dihedral_twist_deg-0__global_tilt_deg-0__helix_len-28__input_axis_mode-auto_pca__input_chain-none__input_pdb_path-8flx.pdb__input_pdb_range-none__input_target_axis-0_0_1__omega_deg-180__phi_deg--57.8__psi_deg--47__resname-ALA__ring_delta_radius-0__ring_delta_twist_deg-0__ring_delta_z-0__ring_stack_copies-0__roll_deg-0__sym_axis-0_0_1__sym_center-0_0_0__sym_mode-rotate__sym_n-3__sym_radius-30__sym_start_angle-0.pdb": "0d271d399661c4cb21b7"
+  }
+}{
+  "date": "2025-11-02 17:53:43.923925",
+  "files": {
+    "outs/8flx__dihedral_axis-1_0_0__dihedral_enable-0__dihedral_post_delta_r-0__dihedral_post_shift_z-0__dihedral_twist_deg-0__global_tilt_deg-0__helix_len-28__input_axis_mode-auto_pca__input_chain-none__input_pdb_path-8flx.pdb__input_pdb_range-none__input_target_axis-0_0_1__omega_deg-180__phi_deg--57.8__psi_deg--47__resname-ALA__ring_delta_radius-0__ring_delta_twist_deg-0__ring_delta_z-0__ring_stack_copies-0__roll_deg-0__sym_axis-0_0_1__sym_center-0_0_0__sym_n-3__sym_radius-30__sym_start_angle-0.pdb": "53f29e6a5339e9d99bf5"
+  }
+}{
+  "date": "2025-11-06 11:11:26.953395",
+  "files": {
+    "outs/C6_hlhlhl__dihedral_axis-1_0_0__dihedral_enable-0__dihedral_post_delta_r-0__dihedral_post_shift_z-0__dihedral_twist_deg-0__global_tilt_deg-0__helix_len-28__input_axis_mode-auto_pca__input_chain-none__input_pdb_path-hlhlh_single_seed.pdb__input_pdb_range-none__input_target_axis-0_0_1__omega_deg-180__phi_deg--57.8__psi_deg--47__resname-ALA__ring_delta_radius-0__ring_delta_twist_deg-0__ring_delta_z-0__ring_stack_copies-0__roll_deg-0__sym_axis-0_0_1__sym_center-0_0_0__sym_n-6__sym_radius-30__sym_start_angle-0.pdb": "efa6a6623c566f2e8df2"
+  }
+}{
+  "date": "2025-11-06 11:12:11.136789",
+  "files": {
+    "outs/C6_hlhlhl__dihedral_axis-1_0_0__dihedral_enable-0__dihedral_post_delta_r-0__dihedral_post_shift_z-0__dihedral_twist_deg-0__global_tilt_deg-0__helix_len-28__input_axis_mode-auto_pca__input_chain-none__input_pdb_path-hlhlh_single_seed.pdb__input_pdb_range-none__input_target_axis-0_0_1__omega_deg-180__phi_deg--57.8__psi_deg--47__resname-ALA__ring_delta_radius-0__ring_delta_twist_deg-0__ring_delta_z-0__ring_stack_copies-0__roll_deg-0__sym_axis-0_0_1__sym_center-0_0_0__sym_n-3__sym_radius-30__sym_start_angle-0.pdb": "7a964ea38172f77c398c"
+  }
+}{
+  "date": "2025-11-06 11:12:19.744654",
+  "files": {
+    "outs/C6_hlhlhl__dihedral_axis-1_0_0__dihedral_enable-0__dihedral_post_delta_r-0__dihedral_post_shift_z-0__dihedral_twist_deg-0__global_tilt_deg-0__helix_len-28__input_axis_mode-auto_pca__input_chain-none__input_pdb_path-hlhlh_single_seed.pdb__input_pdb_range-none__input_target_axis-0_0_1__omega_deg-180__phi_deg--57.8__psi_deg--47__resname-ALA__ring_delta_radius-0__ring_delta_twist_deg-0__ring_delta_z-0__ring_stack_copies-0__roll_deg-0__sym_axis-0_0_1__sym_center-0_0_0__sym_n-4__sym_radius-30__sym_start_angle-0.pdb": "4b805c8355745daad2f9"
+  }
+}{
+  "date": "2025-11-06 11:12:27.920114",
+  "files": {
+    "outs/C6_hlhlhl__dihedral_axis-1_0_0__dihedral_enable-0__dihedral_post_delta_r-0__dihedral_post_shift_z-0__dihedral_twist_deg-0__global_tilt_deg-0__helix_len-28__input_axis_mode-auto_pca__input_chain-none__input_pdb_path-hlhlh_single_seed.pdb__input_pdb_range-none__input_target_axis-0_0_1__omega_deg-180__phi_deg--57.8__psi_deg--47__resname-ALA__ring_delta_radius-0__ring_delta_twist_deg-0__ring_delta_z-0__ring_stack_copies-0__roll_deg-0__sym_axis-0_0_1__sym_center-0_0_0__sym_n-5__sym_radius-30__sym_start_angle-0.pdb": "d8ecea812e93b99f72d9"
+  }
+}{
+  "date": "2025-11-06 11:18:45.924474",
+  "files": {
+    "outs/Dx_hlhlhl__dihedral_axis-1_0_0__dihedral_enable-1__dihedral_post_delta_r-0__dihedral_post_shift_z-5__dihedral_twist_deg-0__global_tilt_deg-0__helix_len-28__input_axis_mode-auto_pca__input_chain-none__input_pdb_path-hlhlh_single_seed.pdb__input_pdb_range-none__input_target_axis-0_0_1__omega_deg-180__phi_deg--57.8__psi_deg--47__resname-ALA__ring_delta_radius-0__ring_delta_twist_deg-0__ring_delta_z-0__ring_stack_copies-0__roll_deg-0__sym_axis-0_0_1__sym_center-0_0_0__sym_n-3__sym_radius-30__sym_start_angle-0.pdb": "68dc2dc405e1960c9ff7"
+  }
+}{
+  "date": "2025-11-06 11:19:09.463771",
+  "files": {
+    "outs/Dx_hlhlhl__dihedral_axis-1_0_0__dihedral_enable-1__dihedral_post_delta_r-5__dihedral_post_shift_z-5__dihedral_twist_deg-0__global_tilt_deg-0__helix_len-28__input_axis_mode-auto_pca__input_chain-none__input_pdb_path-hlhlh_single_seed.pdb__input_pdb_range-none__input_target_axis-0_0_1__omega_deg-180__phi_deg--57.8__psi_deg--47__resname-ALA__ring_delta_radius-0__ring_delta_twist_deg-0__ring_delta_z-0__ring_stack_copies-0__roll_deg-0__sym_axis-0_0_1__sym_center-0_0_0__sym_n-3__sym_radius-30__sym_start_angle-0.pdb": "7328c1f0b1501a4371d6"
+  }
+}{
+  "date": "2025-11-06 11:20:00.570668",
+  "files": {
+    "outs/Dx_hlhlhl__dihedral_axis-1_0_0__dihedral_enable-1__dihedral_post_delta_r-20__dihedral_post_shift_z-20__dihedral_twist_deg-0__global_tilt_deg-0__helix_len-28__input_axis_mode-auto_pca__input_chain-none__input_pdb_path-hlhlh_single_seed.pdb__input_pdb_range-none__input_target_axis-0_0_1__omega_deg-180__phi_deg--57.8__psi_deg--47__resname-ALA__ring_delta_radius-0__ring_delta_twist_deg-0__ring_delta_z-0__ring_stack_copies-0__roll_deg-0__sym_axis-0_0_1__sym_center-0_0_0__sym_n-3__sym_radius-30__sym_start_angle-0.pdb": "d81ae1a422eeaa4825cb"
+  }
+}{
+  "date": "2025-11-06 11:21:57.570688",
+  "files": {
+    "outs/Sx_hlhlhl__dihedral_axis-1_0_0__dihedral_enable-1__dihedral_post_delta_r-20__dihedral_post_shift_z-20__dihedral_twist_deg-0__global_tilt_deg-0__helix_len-28__input_axis_mode-auto_pca__input_chain-none__input_pdb_path-hlhlh_single_seed.pdb__input_pdb_range-none__input_target_axis-0_0_1__omega_deg-180__phi_deg--57.8__psi_deg--47__resname-ALA__ring_delta_radius-0__ring_delta_twist_deg-0__ring_delta_z-0__ring_stack_copies-3__roll_deg-0__sym_axis-0_0_1__sym_center-0_0_0__sym_n-3__sym_radius-30__sym_start_angle-0.pdb": "76da1367fe1b0f1c02e5"
+  }
+}{
+  "date": "2025-11-06 11:23:14.999236",
+  "files": {
+    "outs/Sx_hlhlhl__dihedral_axis-1_0_0__dihedral_enable-0__dihedral_post_delta_r-20__dihedral_post_shift_z-20__dihedral_twist_deg-0__global_tilt_deg-0__helix_len-28__input_axis_mode-auto_pca__input_chain-none__input_pdb_path-hlhlh_single_seed.pdb__input_pdb_range-none__input_target_axis-0_0_1__omega_deg-180__phi_deg--57.8__psi_deg--47__resname-ALA__ring_delta_radius-0__ring_delta_twist_deg-5__ring_delta_z-0__ring_stack_copies-3__roll_deg-0__sym_axis-0_0_1__sym_center-0_0_0__sym_n-3__sym_radius-30__sym_start_angle-0.pdb": "7d5ca96bc70a37e6566f"
+  }
+}{
+  "date": "2025-11-06 11:24:04.029065",
+  "files": {
+    "outs/Sx_hlhlhl__dihedral_axis-1_0_0__dihedral_enable-0__dihedral_post_delta_r-20__dihedral_post_shift_z-20__dihedral_twist_deg-0__global_tilt_deg-0__helix_len-28__input_axis_mode-auto_pca__input_chain-none__input_pdb_path-hlhlh_single_seed.pdb__input_pdb_range-none__input_target_axis-0_0_1__omega_deg-180__phi_deg--57.8__psi_deg--47__resname-ALA__ring_delta_radius-0__ring_delta_twist_deg-0__ring_delta_z-10__ring_stack_copies-3__roll_deg-0__sym_axis-0_0_1__sym_center-0_0_0__sym_n-3__sym_radius-30__sym_start_angle-0.pdb": "e4ec9a003324ef4c8848"
+  }
+}{
+  "date": "2025-11-06 11:24:49.164788",
+  "files": {
+    "outs/Sx_hlhlhl__dihedral_axis-1_0_0__dihedral_enable-0__dihedral_post_delta_r-20__dihedral_post_shift_z-20__dihedral_twist_deg-0__global_tilt_deg-0__helix_len-28__input_axis_mode-auto_pca__input_chain-none__input_pdb_path-hlhlh_single_seed.pdb__input_pdb_range-none__input_target_axis-0_1_0__omega_deg-180__phi_deg--57.8__psi_deg--47__resname-ALA__ring_delta_radius-0__ring_delta_twist_deg-0__ring_delta_z-10__ring_stack_copies-3__roll_deg-0__sym_axis-0_0_1__sym_center-0_0_0__sym_n-3__sym_radius-30__sym_start_angle-0.pdb": "aa42954b488b1c90731b"
+  }
+}{
+  "date": "2025-11-06 11:25:19.911544",
+  "files": {
+    "outs/Sx_hlhlhl__dihedral_axis-1_0_0__dihedral_enable-0__dihedral_post_delta_r-20__dihedral_post_shift_z-20__dihedral_twist_deg-0__global_tilt_deg-0__helix_len-28__input_axis_mode-auto_pca__input_chain-none__input_pdb_path-hlhlh_single_seed.pdb__input_pdb_range-none__input_target_axis-0_1_0__omega_deg-180__phi_deg--57.8__psi_deg--47__resname-ALA__ring_delta_radius-0__ring_delta_twist_deg-0__ring_delta_z-15__ring_stack_copies-3__roll_deg-0__sym_axis-0_0_1__sym_center-0_0_0__sym_n-3__sym_radius-30__sym_start_angle-0.pdb": "bc65865e607e031669a9"
+  }
+}

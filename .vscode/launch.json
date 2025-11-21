@@ -1,0 +1,19 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Python Debug",
+      "type": "python",
+      "request": "launch",
+      "program": "${file}",
+      "python": "/home/eva/miniconda3/envs/pyrosetta/bin/python",
+      "console": "integratedTerminal",
+      "justMyCode": false,
+      "env": {
+        "PYTHONPATH": "",
+        "CONDA_PREFIX": "/home/eva/miniconda3/envs/pyrosetta",
+        "LD_LIBRARY_PATH": "/home/eva/miniconda3/envs/pyrosetta/lib"
+      }
+    }
+  ]
+}

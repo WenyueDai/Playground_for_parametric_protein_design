@@ -48,13 +48,13 @@ psi_deg = -47.0 # typical alpha-helix psi angle
 omega_deg = 180.0 # typical alpha-helix omega angle
 
 # --- Otherwise, use your own pdb ---
-input_pdb_path = "/home/eva/20251031_parametric_design_playground/8flx.pdb"      # empty string means "disabled"
+input_pdb_path = "/home/eva/20251031_parametric_design_playground/outs/hlhlh_single_seed.pdb"      # empty string means "disabled"
 input_chain = ""         # "A"; empty means "use whole pose or infer"
 input_pdb_range = ""     # "5-42" in PDB numbering within the chosen chain; empty means "full chain"
 
 # --- Input parameters compatible for both de novo build or input pdb ---
 input_axis_mode = "auto_pca"      # "auto_pca" | "auto_ends" - use N-C end as axis which is much faster than PCA, could do poorly for short/curved segments
-input_target_axis = "0,0,1"        # DEFAULT: if None/""/"none", aligns to +Z (0,0,1); if a vector "x,y,z", aligns to that vector.
+input_target_axis = "0,1,0"        # DEFAULT: if None/""/"none", aligns to +Z (0,0,1); if a vector "x,y,z", aligns to that vector.
 roll_deg = 0           # roll around the (aligned) target axis
 
 # --- Cn symmetry parameters ---
@@ -68,18 +68,18 @@ global_tilt_deg = 0.0 # tilt each helix away from sym_axis by this many degrees 
 # --- Dihedral extension (C_n -> D_n) ---
 dihedral_enable = False # create partner ring by a 180° rotation about dihedral_axis through sym_center
 dihedral_axis = "1,0,0"         # a C2 axis perpendicular to sym_axis
-dihedral_post_shift_z   = 0.0      # translate/shift along sym_axis (Å)
-dihedral_post_delta_r   = 0.0      # push outward radially from sym_center (Å)
+dihedral_post_shift_z   = 20.0      # translate/shift along sym_axis (Å)
+dihedral_post_delta_r   = 20.0      # push outward radially from sym_center (Å)
 dihedral_twist_deg = 0.0        # extra twist about sym_axis immediately after reflection
 
 # --- Ring stacking / expansion ---
-ring_stack_copies = 0           # number of extra rings to add
+ring_stack_copies = 3           # number of extra rings to add
 ring_delta_radius = 0.0         # outward shift per ring (Å)
-ring_delta_z = 0.0              # axial shift per ring (Å)
+ring_delta_z = 15.0              # axial shift per ring (Å)
 ring_delta_twist_deg = 0.0      # extra azimuth per ring (deg)
 
 resname = "ALA"     # residue name to display in PDB
-out_pdb = "outs/8flx.pdb" # the bash path will be used as dictionary, filename will joined with hash key to save
+out_pdb = "outs/Sx_hlhlhl.pdb" # the bash path will be used as dictionary, filename will joined with hash key to save
 
 # =========================================================
 # Basic 3D operations
