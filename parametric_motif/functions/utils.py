@@ -223,6 +223,11 @@ def _add_helix_geometry_constraints(pose, start, end,
             O_i   = AtomID(pose.residue(i).atom_index("O"), i)
             pose.add_constraint(AtomPairConstraint(N_ip4, O_i, HarmonicFunc(d_NO, sd_NO)))
 
+def _append_residue(pose, res):
+    if pose.size() == 0:
+        pose.append_residue_by_bond(res, True)
+    else:
+        pose.append_residue_by_bond(res, False)
 
 if __name__ == "__main__":
     _ensure_init()
@@ -252,5 +257,4 @@ if __name__ == "__main__":
     _add_helix_geometry_constraints(pose, 1, pose.size(),
                                     phi=PHI_ALPHA, psi=PSI_ALPHA,
                                     add_hbond=True)
-    
     

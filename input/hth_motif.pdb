@@ -1,0 +1,17 @@
+ATOM      1  N   ALA A   1      11.441  13.232   7.002
+ATOM      2  CA  ALA A   1      10.140  12.668   7.385
+ATOM      3  C   ALA A   1       9.081  13.730   7.510
+ATOM      4  O   ALA A   1       9.373  14.885   7.347
+ATOM      5  N   LEU A   2       7.867  13.316   7.869
+ATOM      6  CA  LEU A   2       6.736  14.270   7.926
+ATOM      7  C   LEU A   2       6.138  14.588   6.560
+ATOM      8  O   LEU A   2       5.273  15.422   6.464
+ATOM      9  N   GLY A   3       6.598  13.885   5.556
+ATOM     10  CA  GLY A   3       6.100  14.078   4.206
+ATOM     11  C   GLY A   3       6.180  12.873   3.308
+ATOM     12  O   GLY A   3       7.330  12.420   3.021
+ATOM     13  N   ALA A   4       5.000  12.359   2.920
+ATOM     14  CA  ALA A   4       4.941  11.217   2.032
+ATOM     15  C   ALA A   4       4.384  11.629   0.684
+ATOM     16  O   ALA A   4       3.244  12.077   0.563
+END
