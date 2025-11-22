@@ -1,3 +1,7 @@
 /outs
 /study_note
 0_test.py
+output/
+__pycache__/
+archive/
+develop/
