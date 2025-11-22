@@ -18,9 +18,12 @@ def build_alpha(phi=PHI_ALPHA, psi=PSI_ALPHA, length=12, aa="A", relax_after=Tru
         os.makedirs(output_folder, exist_ok=True)
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"{timestamp}_helix.pdb"
-        pose.dump_pdb(str(output_folder / filename))
+        filename = str(output_folder / filename)
+        pose.dump_pdb(filename)
 
-    return pose
+    return pose, filename
 
 if __name__ == "__main__":
-    helix = build_alpha(-57.8, -47.0, 12)
+    helix, output_file = build_alpha(-57.8, -47.0, 12, dump_pdb=True)
+    print("Built helix with", helix.size(), "residues.")
+    print(f"dumped PDB to output folder: {output_file}")
